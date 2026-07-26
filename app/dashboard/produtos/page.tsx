@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Fraunces, Inter } from 'next/font/google'
@@ -29,7 +29,12 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
 
 export default function ProdutosPage() {
   const router = useRouter()
-  const supabase = createClient()
+
+  // FIX 1: createClient() dentro de useRef para garantir que a instância é
+  // criada uma única vez e não muda entre re-renders ou remontagens do
+  // StrictMode — evita Promises em flight sendo abandonadas silenciosamente.
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   const [restaurantId, setRestaurantId] = useState<string | null>(null)
   const [products, setProducts] = useState<Product[]>([])
@@ -46,61 +51,104 @@ export default function ProdutosPage() {
     setLoading(true)
     setError(null)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    // FIX 2: try/catch cobrindo TODO o fluxo de fetch.
+    // Antes, qualquer exceção (timeout, erro de rede, resposta inesperada do
+    // Supabase) fazia a função parar sem chamar setLoading(false), deixando
+    // a tela travada em "Carregando pratos…" eternamente sem log nenhum.
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
 
-    if (!user) {
-      router.push('/login')
-      return
-    }
+      // FIX 3: trata o erro de autenticação explicitamente em vez de
+      // confiar que `user` será null — alguns erros de rede retornam
+      // error != null com user == null ao mesmo tempo.
+      if (userError) {
+        console.error('[produtos] auth.getUser error:', userError)
+        setError('Falha ao verificar sessão. Tente recarregar a página.')
+        setLoading(false)
+        return
+      }
 
-    const { data: restaurant } = await supabase
-      .from('restaurants')
-      .select('id')
-      .eq('owner_id', user.id)
-      .single()
+      if (!user) {
+        router.push('/login')
+        return
+      }
 
-    if (!restaurant) {
-      setError('Não foi possível identificar o seu restaurante.')
-      setLoading(false)
-      return
-    }
+      const { data: restaurant, error: restaurantError } = await supabase
+        .from('restaurants')
+        .select('id')
+        .eq('owner_id', user.id)
+        .single()
 
-    setRestaurantId(restaurant.id)
+      if (restaurantError) {
+        console.error('[produtos] restaurants query error:', restaurantError)
+        setError('Não foi possível identificar o seu restaurante.')
+        setLoading(false)
+        return
+      }
 
-    const { data, error: fetchError } = await supabase
-      .from('products')
-      .select('*, categories(id, name)')
-      .eq('restaurant_id', restaurant.id)
-      .order('display_order')
+      if (!restaurant) {
+        setError('Nenhum restaurante encontrado para este usuário.')
+        setLoading(false)
+        return
+      }
 
-    if (fetchError) {
-      setError('Não foi possível carregar os pratos.')
-    } else {
+      setRestaurantId(restaurant.id)
+
+      const { data, error: fetchError } = await supabase
+        .from('products')
+        .select('*, categories(id, name)')
+        .eq('restaurant_id', restaurant.id)
+        .order('display_order')
+
+      if (fetchError) {
+        // FIX 4: loga o erro real do Supabase no console para facilitar debug
+        // (ex: violação de RLS, coluna inexistente, timeout).
+        console.error('[produtos] products query error:', fetchError)
+        setError(`Não foi possível carregar os pratos. (${fetchError.message})`)
+        setLoading(false)
+        return
+      }
+
       setProducts((data as Product[]) ?? [])
+    } catch (err) {
+      // FIX 5: captura exceções não tratadas (ex: fetch abortado, erro de rede)
+      // que antes deixavam setLoading(false) nunca sendo chamado.
+      console.error('[produtos] unexpected error:', err)
+      setError('Erro inesperado ao carregar os pratos. Tente recarregar a página.')
+    } finally {
+      // FIX 6: finally garante que loading SEMPRE é desligado,
+      // independente de qual caminho de código foi executado acima.
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   async function toggleAvailability(product: Product) {
     setPendingId(product.id)
 
-    const { error: updateError } = await supabase
-      .from('products')
-      .update({ is_available: !product.is_available })
-      .eq('id', product.id)
+    try {
+      const { error: updateError } = await supabase
+        .from('products')
+        .update({ is_available: !product.is_available })
+        .eq('id', product.id)
 
-    if (!updateError) {
+      if (updateError) {
+        console.error('[produtos] toggleAvailability error:', updateError)
+        return
+      }
+
       setProducts((prev) =>
         prev.map((p) =>
           p.id === product.id ? { ...p, is_available: !p.is_available } : p
         )
       )
+    } catch (err) {
+      console.error('[produtos] toggleAvailability unexpected:', err)
+    } finally {
+      setPendingId(null)
     }
-
-    setPendingId(null)
   }
 
   async function handleDelete(product: Product) {
@@ -111,16 +159,23 @@ export default function ProdutosPage() {
 
     setPendingId(product.id)
 
-    const { error: deleteError } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', product.id)
+    try {
+      const { error: deleteError } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', product.id)
 
-    if (!deleteError) {
+      if (deleteError) {
+        console.error('[produtos] handleDelete error:', deleteError)
+        return
+      }
+
       setProducts((prev) => prev.filter((p) => p.id !== product.id))
+    } catch (err) {
+      console.error('[produtos] handleDelete unexpected:', err)
+    } finally {
+      setPendingId(null)
     }
-
-    setPendingId(null)
   }
 
   return (
@@ -128,6 +183,7 @@ export default function ProdutosPage() {
       className={`${fraunces.variable} ${inter.variable} min-h-screen bg-[#F6F4EF] text-[#2B2622] font-[family-name:var(--font-body)] py-10 px-6`}
     >
       <div className="max-w-3xl mx-auto">
+
         {/* Cabeçalho */}
         <div className="flex items-start justify-between gap-4 mb-8">
           <div className="hidden lg:block">
@@ -138,7 +194,6 @@ export default function ProdutosPage() {
               Pratos
             </h1>
           </div>
-
           <Link
             href="/dashboard/produtos/novo"
             className="shrink-0 bg-[#2B2622] text-[#F6F4EF] text-sm font-medium rounded-sm px-4 py-2.5 hover:bg-[#3F6B4F] transition"
@@ -156,12 +211,20 @@ export default function ProdutosPage() {
 
         {/* Estado: erro */}
         {!loading && error && (
-          <p
-            role="alert"
-            className="text-sm text-[#C1502E] bg-[#C1502E]/[0.08] border border-[#C1502E]/20 rounded-sm px-4 py-3"
-          >
-            {error}
-          </p>
+          <div className="space-y-3">
+            <p
+              role="alert"
+              className="text-sm text-[#C1502E] bg-[#C1502E]/[0.08] border border-[#C1502E]/20 rounded-sm px-4 py-3"
+            >
+              {error}
+            </p>
+            <button
+              onClick={loadProducts}
+              className="text-sm font-medium text-[#8A8375] underline underline-offset-2"
+            >
+              Tentar novamente
+            </button>
+          </div>
         )}
 
         {/* Estado: vazio */}
