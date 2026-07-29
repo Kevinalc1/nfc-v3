@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
+import Image from 'next/image'
 import { Fraunces, Inter } from 'next/font/google'
 import { createClient } from '@/lib/supabase/client'
 import type { Tables } from '@/types_db'
@@ -285,6 +286,18 @@ export default function CardapioPublicoPage() {
     >
       {/* Cabeçalho */}
       <header className="bg-[#3F6B4F] text-[#F6F4EF] px-6 pt-8 pb-6">
+        {/* Logo centralizada — visível para o cliente ao abrir o cardápio */}
+        <div className="flex justify-center mb-5">
+          <Image
+            src="/logo.svg"
+            alt="Logo do Restaurante"
+            width={160}
+            height={50}
+            className="w-40 h-auto object-contain"
+            priority
+          />
+        </div>
+
         <p className="text-[11px] tracking-[0.2em] uppercase text-[#CFE0D3]">
           Mesa {table?.table_number}
         </p>
@@ -328,7 +341,9 @@ export default function CardapioPublicoPage() {
       )}
 
       {/* Lista de produtos, agrupados por categoria */}
-      <main className="px-6 py-6 space-y-8 max-w-xl mx-auto">
+      <main className={`py-6 space-y-8 max-w-xl mx-auto ${
+        restaurant?.menu_style === 'alta_gastronomia' ? 'px-4' : 'px-5'
+      }`}>
         {products.length === 0 && (
           <p className="text-sm text-[#8A8375] text-center py-16">
             Nenhum prato disponível no momento.
@@ -344,7 +359,10 @@ export default function CardapioPublicoPage() {
               <h2 className="font-[family-name:var(--font-display)] text-xl font-medium mb-3">
                 {cat.name}
               </h2>
-              <div className="space-y-3">
+              <div className={restaurant?.menu_style === 'alta_gastronomia'
+                ? 'grid grid-cols-2 gap-4'
+                : 'space-y-0 divide-y divide-[#F0EBE3]'
+              }>
                 {items.map((product) => (
                   <ProductCard
                     key={product.id}
@@ -355,6 +373,7 @@ export default function CardapioPublicoPage() {
                       changeQuantity(product.id, delta)
                     }
                     onPlayVideo={() => setVideoPreview(product)}
+                    menuStyle={restaurant?.menu_style ?? 'alta_gastronomia'}
                   />
                 ))}
               </div>
@@ -369,7 +388,10 @@ export default function CardapioPublicoPage() {
               <h2 className="font-[family-name:var(--font-display)] text-xl font-medium mb-3">
                 Outros
               </h2>
-              <div className="space-y-3">
+              <div className={restaurant?.menu_style === 'alta_gastronomia'
+                ? 'grid grid-cols-2 gap-4'
+                : 'space-y-0 divide-y divide-[#F0EBE3]'
+              }>
                 {productsByCategory.get('sem-categoria')!.map((product) => (
                   <ProductCard
                     key={product.id}
@@ -380,6 +402,7 @@ export default function CardapioPublicoPage() {
                       changeQuantity(product.id, delta)
                     }
                     onPlayVideo={() => setVideoPreview(product)}
+                    menuStyle={restaurant?.menu_style ?? 'alta_gastronomia'}
                   />
                 ))}
               </div>
@@ -554,63 +577,93 @@ export default function CardapioPublicoPage() {
 
 // ---------- Cartão de produto ----------
 
-function ProductCard({
-  product,
-  quantity,
-  onAdd,
-  onChangeQuantity,
-  onPlayVideo,
-}: {
+// ---------------------------------------------------------------------------
+// Props compartilhadas entre os dois layouts de card
+// ---------------------------------------------------------------------------
+
+type ProductCardProps = {
   product: Product
   quantity: number
   onAdd: () => void
   onChangeQuantity: (delta: number) => void
   onPlayVideo: () => void
-}) {
+}
+
+// ---------------------------------------------------------------------------
+// Layout 1: Alta Gastronomia — card vertical com foto grande aspect-square
+// ---------------------------------------------------------------------------
+
+function ProductCardGastronomia({
+  product,
+  quantity,
+  onAdd,
+  onChangeQuantity,
+  onPlayVideo,
+}: ProductCardProps) {
   return (
-    <div className="bg-white border border-[#DAD5C9] rounded-sm p-3 flex gap-3">
-      <div className="relative w-20 h-20 rounded-sm border border-[#DAD5C9] bg-[#FBFAF7] overflow-hidden shrink-0">
+    <div className="bg-white rounded-3xl overflow-hidden border border-[#EEE9E0] shadow-sm">
+      {/* Foto em destaque */}
+      <div className="relative w-full aspect-square bg-[#F6F4EF]">
         {product.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={product.image_url}
             alt={product.name}
-            className="w-full h-full object-cover"
+            fill
+            sizes="(max-width: 640px) 100vw, 50vw"
+            className="object-cover"
           />
         ) : (
-          <span className="w-full h-full flex items-center justify-center text-[10px] text-[#B8B2A2] text-center px-1">
+          <div className="w-full h-full flex items-center justify-center text-xs text-[#B8B2A2]">
             Sem foto
-          </span>
+          </div>
         )}
         {product.video_url && (
           <button
             onClick={onPlayVideo}
             aria-label="Ver vídeo do prato"
-            className="absolute inset-0 flex items-center justify-center bg-[#2B2622]/30"
+            className="absolute inset-0 flex items-center justify-center bg-[#2B2622]/20"
           >
-            <span className="w-7 h-7 rounded-full bg-[#F6F4EF] flex items-center justify-center text-xs">
+            <span className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center text-sm shadow">
               ▶
             </span>
           </button>
         )}
       </div>
 
-      <div className="flex-1 min-w-0 flex flex-col">
-        <h3 className="text-sm font-medium">{product.name}</h3>
+      {/* Conteúdo */}
+      <div className="p-4">
+        <h3
+          className="text-base font-medium text-[#2B2622] leading-snug"
+          style={{ fontFamily: 'Georgia, serif' }}
+        >
+          {product.name}
+        </h3>
         {product.description && (
-          <p className="text-xs text-[#8A8375] mt-0.5 line-clamp-2">
+          <p className="mt-1 text-xs text-[#8A8375] leading-relaxed line-clamp-3">
             {product.description}
           </p>
         )}
-        <div className="mt-auto pt-2 flex items-center justify-between">
-          <span className="text-sm font-mono">
-            {currencyFormatter.format(product.price)}
+
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <span className="text-sm font-semibold text-[#2B2622]">
+            {product.promo_price != null && product.promo_price < product.price ? (
+              <>
+                <span className="text-[#3F6B4F]">
+                  {currencyFormatter.format(product.promo_price)}
+                </span>
+                <span className="ml-1.5 text-xs text-[#B8B2A2] line-through font-normal">
+                  {currencyFormatter.format(product.price)}
+                </span>
+              </>
+            ) : (
+              currencyFormatter.format(product.price)
+            )}
           </span>
 
           {quantity === 0 ? (
             <button
               onClick={onAdd}
-              className="text-xs font-medium rounded-sm bg-[#2B2622] text-[#F6F4EF] px-3 py-1.5 hover:bg-[#3F6B4F] transition"
+              className="text-xs font-medium rounded-full bg-[#2B2622] text-[#F6F4EF] px-4 py-1.5 hover:bg-[#3F6B4F] transition"
             >
               Adicionar
             </button>
@@ -618,16 +671,14 @@ function ProductCard({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onChangeQuantity(-1)}
-                className="w-6 h-6 rounded-full border border-[#DAD5C9] text-xs"
+                className="w-7 h-7 rounded-full border border-[#DAD5C9] text-sm font-medium"
               >
                 −
               </button>
-              <span className="text-sm font-mono w-4 text-center">
-                {quantity}
-              </span>
+              <span className="text-sm font-mono w-4 text-center">{quantity}</span>
               <button
                 onClick={() => onChangeQuantity(1)}
-                className="w-6 h-6 rounded-full border border-[#DAD5C9] text-xs"
+                className="w-7 h-7 rounded-full bg-[#2B2622] text-[#F6F4EF] text-sm font-medium hover:bg-[#3F6B4F] transition"
               >
                 +
               </button>
@@ -637,4 +688,116 @@ function ProductCard({
       </div>
     </div>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Layout 2: Conversão Rápida — card horizontal compacto estilo iFood
+// ---------------------------------------------------------------------------
+
+function ProductCardConversao({
+  product,
+  quantity,
+  onAdd,
+  onChangeQuantity,
+  onPlayVideo,
+}: ProductCardProps) {
+  return (
+    <div className="bg-white border-b border-[#F0EBE3] py-3 flex gap-3 items-start">
+      {/* Texto */}
+      <div className="flex-1 min-w-0">
+        <h3 className="text-sm font-bold text-[#2B2622] leading-snug">
+          {product.name}
+        </h3>
+        {product.description && (
+          <p className="mt-0.5 text-xs text-[#8A8375] line-clamp-2 leading-relaxed">
+            {product.description}
+          </p>
+        )}
+        <div className="mt-2 flex items-center gap-3">
+          <span className="text-sm font-bold text-[#2B2622]">
+            {product.promo_price != null && product.promo_price < product.price ? (
+              <>
+                <span className="text-[#3F6B4F]">
+                  {currencyFormatter.format(product.promo_price)}
+                </span>
+                <span className="ml-1 text-xs text-[#B8B2A2] line-through font-normal">
+                  {currencyFormatter.format(product.price)}
+                </span>
+              </>
+            ) : (
+              currencyFormatter.format(product.price)
+            )}
+          </span>
+
+          {quantity > 0 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => onChangeQuantity(-1)}
+                className="w-6 h-6 rounded-full border border-[#DAD5C9] text-xs font-bold"
+              >
+                −
+              </button>
+              <span className="text-xs font-mono w-4 text-center">{quantity}</span>
+              <button
+                onClick={() => onChangeQuantity(1)}
+                className="w-6 h-6 rounded-full bg-[#3F6B4F] text-white text-xs font-bold"
+              >
+                +
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Foto compacta + botão de adicionar */}
+      <div className="shrink-0 relative">
+        <div className="w-24 h-24 rounded-xl overflow-hidden bg-[#F6F4EF] border border-[#EEE9E0]">
+          {product.image_url ? (
+            <Image
+              src={product.image_url}
+              alt={product.name}
+              width={96}
+              height={96}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[10px] text-[#B8B2A2] text-center px-1">
+              Sem foto
+            </div>
+          )}
+          {product.video_url && (
+            <button
+              onClick={onPlayVideo}
+              aria-label="Ver vídeo"
+              className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-xl"
+            >
+              <span className="text-white text-xs">▶</span>
+            </button>
+          )}
+        </div>
+
+        {/* Botão + flutuante sobre a foto */}
+        {quantity === 0 && (
+          <button
+            onClick={onAdd}
+            aria-label={`Adicionar ${product.name}`}
+            className="absolute -bottom-2 -right-2 w-7 h-7 rounded-full bg-[#3F6B4F] text-white text-lg font-bold shadow-md flex items-center justify-center hover:bg-[#2B2622] transition leading-none"
+          >
+            +
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Wrapper condicional — escolhe o layout conforme restaurant.menu_style
+// ---------------------------------------------------------------------------
+
+function ProductCard(props: ProductCardProps & { menuStyle: string }) {
+  const { menuStyle, ...rest } = props
+  return menuStyle === 'conversao_rapida'
+    ? <ProductCardConversao {...rest} />
+    : <ProductCardGastronomia {...rest} />
 }

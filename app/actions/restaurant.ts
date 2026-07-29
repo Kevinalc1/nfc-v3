@@ -19,6 +19,7 @@ export type RestaurantSettingsPayload = {
   name: string
   slug: string
   description: string
+  menu_style: 'alta_gastronomia' | 'conversao_rapida'
 }
 
 // ---------------------------------------------------------------------------
@@ -89,15 +90,18 @@ export async function updateRestaurantSettings(
     let rawName: string
     let rawSlug: string
     let rawDescription: string
+    let rawMenuStyle: string
 
     if (input instanceof FormData) {
       rawName = (input.get('name') as string) ?? ''
       rawSlug = (input.get('slug') as string) ?? ''
       rawDescription = (input.get('description') as string) ?? ''
+      rawMenuStyle = (input.get('menu_style') as string) ?? 'alta_gastronomia'
     } else {
       rawName = input.name
       rawSlug = input.slug
       rawDescription = input.description
+      rawMenuStyle = input.menu_style
     }
 
     const name = rawName.trim()
@@ -158,17 +162,36 @@ export async function updateRestaurantSettings(
       }
     }
 
+    const menuStyle = (rawMenuStyle === 'conversao_rapida'
+      ? 'conversao_rapida'
+      : 'alta_gastronomia') as 'alta_gastronomia' | 'conversao_rapida'
+
+    // DEBUG — remova após confirmar que a coluna existe no banco
+    console.log('[updateRestaurantSettings] payload enviado ao Supabase:', {
+      name,
+      slug,
+      description: description || null,
+      menu_style: menuStyle,
+    })
+
     const { data: updated, error: updateError } = await supabase
       .from('restaurants')
       .update({
         name,
         slug,
         description: description || null,
+        menu_style: menuStyle,
       })
       .eq('id', restaurant.id)
       .eq('owner_id', restaurant.owner_id)
       .select()
       .single()
+
+    // DEBUG — remova após confirmar que a coluna existe no banco
+    console.log('[updateRestaurantSettings] resposta do Supabase:', {
+      updated,
+      updateError,
+    })
 
     if (updateError || !updated) {
       console.error('[updateRestaurantSettings]', updateError)

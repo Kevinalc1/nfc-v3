@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Fraunces, Inter } from 'next/font/google'
@@ -129,16 +130,28 @@ export default function DashboardLayout({
           lg:translate-x-0
         `}
       >
-        {/* Topo: logo / nome do restaurante */}
+        {/* Topo: logo do produto + nome do restaurante */}
         <div className="px-6 pt-8 pb-6 border-b border-white/10">
-          <span className="text-[10px] tracking-[0.2em] uppercase text-[#9FBFA9]">
-            Cardápio Digital
-          </span>
-          <p className="font-[family-name:var(--font-display)] text-lg font-medium mt-1 leading-snug">
-            {restaurantName ?? (
-              <span className="inline-block w-32 h-5 rounded bg-white/10 animate-pulse" />
+          {/* Logo do produto — arquivo público /logo.svg com fundo transparente */}
+          <Image
+            src="/logo.svg"
+            alt="Logo do Restaurante"
+            width={128}
+            height={40}
+            className="w-32 h-auto object-contain"
+            priority
+          />
+
+          {/* Nome do restaurante abaixo da logo */}
+          <div className="mt-4">
+            {restaurantName ? (
+              <p className="font-[family-name:var(--font-display)] text-sm font-medium leading-snug text-[#CFE0D3]">
+                {restaurantName}
+              </p>
+            ) : (
+              <span className="inline-block w-28 h-4 rounded bg-white/10 animate-pulse" />
             )}
-          </p>
+          </div>
         </div>
 
         {/* Navegação */}

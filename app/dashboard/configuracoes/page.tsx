@@ -7,8 +7,11 @@ import {
   updateRestaurantSettings,
   checkSlugAvailability,
   type Restaurant,
+  type RestaurantSettingsPayload,
 } from '@/app/actions/restaurant'
 import { SLUG_RULES } from '@/lib/validations/restaurant'
+
+type MenuStyle = RestaurantSettingsPayload['menu_style']
 
 const fraunces = Fraunces({
   subsets: ['latin'],
@@ -120,6 +123,7 @@ export default function ConfiguracoesPage() {
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [description, setDescription] = useState('')
+  const [menuStyle, setMenuStyle] = useState<MenuStyle>('alta_gastronomia')
 
   const [slugStatus, setSlugStatus] = useState<SlugStatus>({ state: 'idle' })
   const debouncedSlug = useDebounce(slug, 600)
@@ -142,6 +146,7 @@ export default function ConfiguracoesPage() {
         setName(result.data.name)
         setSlug(result.data.slug)
         setDescription(result.data.description ?? '')
+        setMenuStyle((result.data.menu_style as MenuStyle) ?? 'alta_gastronomia')
       } else {
         setLoadError(result.error)
       }
@@ -200,7 +205,8 @@ export default function ConfiguracoesPage() {
     original !== null &&
     (name.trim() !== original.name ||
       normalizeSlug(slug) !== original.slug ||
-      (description.trim() || null) !== original.description)
+      (description.trim() || null) !== original.description ||
+      menuStyle !== (original.menu_style as MenuStyle))
 
   const slugBlocking =
     slugStatus.state === 'taken' ||
@@ -223,6 +229,7 @@ export default function ConfiguracoesPage() {
         name: name.trim(),
         slug: normalizeSlug(slug),
         description: description.trim(),
+        menu_style: menuStyle,
       })
 
       if (result.ok) {
@@ -230,6 +237,7 @@ export default function ConfiguracoesPage() {
         setName(result.data.name)
         setSlug(result.data.slug)
         setDescription(result.data.description ?? '')
+        setMenuStyle((result.data.menu_style as MenuStyle) ?? 'alta_gastronomia')
         setSlugStatus({ state: 'unchanged' })
         setSaveStatus('saved')
         setTimeout(() => setSaveStatus('idle'), 3000)
@@ -245,6 +253,7 @@ export default function ConfiguracoesPage() {
     setName(original.name)
     setSlug(original.slug)
     setDescription(original.description ?? '')
+    setMenuStyle((original.menu_style as MenuStyle) ?? 'alta_gastronomia')
     setSlugStatus({ state: 'unchanged' })
     setSaveStatus('idle')
     setSaveError(null)
@@ -342,6 +351,73 @@ export default function ConfiguracoesPage() {
                 </span>
               </div>
             </div>
+          </div>
+        </SectionCard>
+
+        {/* ── Layout do cardápio ── */}
+        <SectionCard title="Layout do cardápio" dot="bg-[#4A72A6]">
+          <p className="text-xs text-[#8A8375] mb-4">
+            Escolha como os pratos são apresentados para o cliente na mesa.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {([
+              {
+                value: 'alta_gastronomia' as MenuStyle,
+                label: 'Alta Gastronomia',
+                hint: 'Cards grandes, fotos em destaque, tipografia refinada.',
+                preview: (
+                  <div className="w-full aspect-[16/7] rounded-sm bg-[#F6F4EF] border border-[#DAD5C9] mb-3 overflow-hidden flex flex-col gap-1.5 p-2">
+                    <div className="w-full h-10 rounded-sm bg-[#DAD5C9]/60" />
+                    <div className="w-2/3 h-2 rounded-full bg-[#DAD5C9]/80 mt-1" />
+                    <div className="w-1/2 h-2 rounded-full bg-[#DAD5C9]/50" />
+                    <div className="w-1/3 h-2 rounded-full bg-[#3F6B4F]/40 mt-1" />
+                  </div>
+                ),
+              },
+              {
+                value: 'conversao_rapida' as MenuStyle,
+                label: 'Conversão Rápida',
+                hint: 'Cards compactos estilo delivery, botão + visível.',
+                preview: (
+                  <div className="w-full aspect-[16/7] rounded-sm bg-white border border-[#DAD5C9] mb-3 overflow-hidden flex flex-col gap-1.5 p-2">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="flex gap-2 items-center">
+                        <div className="flex-1 space-y-1">
+                          <div className="w-3/4 h-2 rounded-full bg-[#DAD5C9]/80" />
+                          <div className="w-full h-1.5 rounded-full bg-[#DAD5C9]/50" />
+                          <div className="w-1/4 h-2 rounded-full bg-[#3F6B4F]/50" />
+                        </div>
+                        <div className="w-8 h-8 rounded-md bg-[#DAD5C9]/60 shrink-0" />
+                      </div>
+                    ))}
+                  </div>
+                ),
+              },
+            ] as const).map(({ value, label, hint, preview }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setMenuStyle(value)}
+                className={`text-left rounded-sm border-2 p-4 transition ${
+                  menuStyle === value
+                    ? 'border-[#3F6B4F] bg-[#3F6B4F]/[0.06]'
+                    : 'border-[#DAD5C9] hover:border-[#B8B2A2]'
+                }`}
+              >
+                {preview}
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-[#2B2622]">{label}</p>
+                    <p className="text-[11px] text-[#8A8375] mt-0.5">{hint}</p>
+                  </div>
+                  {menuStyle === value && (
+                    <span className="shrink-0 w-4 h-4 rounded-full bg-[#3F6B4F] flex items-center justify-center text-white text-[10px]">
+                      ✓
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
           </div>
         </SectionCard>
 
