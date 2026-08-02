@@ -21,6 +21,10 @@ export type OrderStatus =
   | 'delivered'
   | 'cancelled'
 
+export type MenuStyle =
+  | 'alta_gastronomia'
+  | 'conversao_rapida'
+
 export interface Database {
   public: {
     Tables: {
@@ -36,6 +40,7 @@ export interface Database {
           phone: string | null
           address: string | null
           is_active: boolean
+          menu_style: MenuStyle
           created_at: string
           updated_at: string
         }
@@ -50,6 +55,7 @@ export interface Database {
           phone?: string | null
           address?: string | null
           is_active?: boolean
+          menu_style?: MenuStyle
           created_at?: string
           updated_at?: string
         }
@@ -64,6 +70,7 @@ export interface Database {
           phone?: string | null
           address?: string | null
           is_active?: boolean
+          menu_style?: MenuStyle
           created_at?: string
           updated_at?: string
         }
@@ -155,6 +162,7 @@ export interface Database {
           id: string
           restaurant_id: string
           table_number: string
+          table_slug: string
           qr_code_token: string | null
           is_active: boolean
           created_at: string
@@ -163,6 +171,7 @@ export interface Database {
           id?: string
           restaurant_id: string
           table_number: string
+          table_slug: string
           qr_code_token?: string | null
           is_active?: boolean
           created_at?: string
@@ -171,6 +180,7 @@ export interface Database {
           id?: string
           restaurant_id?: string
           table_number?: string
+          table_slug?: string
           qr_code_token?: string | null
           is_active?: boolean
           created_at?: string
@@ -251,6 +261,7 @@ export interface Database {
     }
     Enums: {
       order_status: OrderStatus
+      menu_style_type: MenuStyle
     }
     CompositeTypes: {
       [_ in never]: never

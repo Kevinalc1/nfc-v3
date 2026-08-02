@@ -57,7 +57,7 @@ function TableCard({
   onPrint: () => void
   pending: boolean
 }) {
-  const menuUrl = buildMenuUrl(restaurantSlug, table.table_number)
+  const menuUrl = buildMenuUrl(restaurantSlug, table.table_slug ?? table.table_number)
   const qrUrl = buildQrImageUrl(menuUrl)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -189,7 +189,7 @@ function PrintModal({
   restaurantName: string
   onClose: () => void
 }) {
-  const menuUrl = buildMenuUrl(restaurantSlug, table.table_number)
+  const menuUrl = buildMenuUrl(restaurantSlug, table.table_slug ?? table.table_number)
   const qrUrl = buildQrImageUrl(menuUrl, 300)
   const printRef = useRef<HTMLDivElement>(null)
 

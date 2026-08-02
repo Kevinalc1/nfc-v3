@@ -5,12 +5,8 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import type { Tables } from '@/types_db'
 
 // ---------------------------------------------------------------------------
-// Tipos de retorno
+// Tipos
 // ---------------------------------------------------------------------------
-
-// Todas as actions retornam um discriminated union { ok, data?, error? }
-// para que o Client Component consiga tratar sucesso e erro de forma
-// segura em TypeScript, sem depender de try/catch no lado do cliente.
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
@@ -18,9 +14,10 @@ export type ActionResult<T = void> =
 
 export type RestaurantTable = Tables<'restaurant_tables'>
 
+import { generateTableSlug } from '@/lib/validations/tables'
+
 // ---------------------------------------------------------------------------
-// Helper interno: resolve o restaurant_id do usuário logado.
-// Centralizar aqui evita repetir a lógica nas três actions abaixo.
+// Helper interno
 // ---------------------------------------------------------------------------
 
 async function resolveRestaurantId(): Promise<
@@ -29,17 +26,9 @@ async function resolveRestaurantId(): Promise<
 > {
   const supabase = await createServerSupabaseClient()
 
-  // 1. Sessão — getUser() valida o JWT no servidor (mais seguro que getSession)
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) return { ok: false, error: 'Usuário não autenticado.' }
 
-  if (userError || !user) {
-    return { ok: false, error: 'Usuário não autenticado.' }
-  }
-
-  // 2. Restaurante vinculado ao owner_id — o RLS garante que só o dono acessa
   const { data: restaurant, error: restaurantError } = await supabase
     .from('restaurants')
     .select('id')
@@ -54,13 +43,8 @@ async function resolveRestaurantId(): Promise<
 }
 
 // ---------------------------------------------------------------------------
-// 1. getTables — busca todas as mesas do restaurante do usuário logado
+// 1. getTables
 // ---------------------------------------------------------------------------
-//
-// Ordenação: mesas ativas antes das inativas, depois por criação.
-// O cruzamento owner_id → restaurant_id já é feito no resolveRestaurantId,
-// então o filtro .eq('restaurant_id', ...) abaixo é suficiente para garantir
-// isolamento entre restaurantes (além do RLS da tabela).
 
 export async function getTables(): Promise<ActionResult<RestaurantTable[]>> {
   try {
@@ -89,69 +73,60 @@ export async function getTables(): Promise<ActionResult<RestaurantTable[]>> {
 }
 
 // ---------------------------------------------------------------------------
-// 2. createTable — cria uma nova mesa com QR code token seguro e único
+// 2. createTable
+//    Gera table_slug automaticamente a partir do nome digitado pelo dono.
+//    O dono digita "Mesa 2" → exibe "Mesa 2" → URL usa "mesa-2".
 // ---------------------------------------------------------------------------
-//
-// Validações:
-//   - name não pode ser vazio nem ultrapassar 50 caracteres
-//   - table_number deve ser único por restaurante (a constraint já existe no
-//     banco, mas validamos antes para entregar mensagem amigável ao usuário)
-//
-// O qr_code_token usa crypto.randomUUID() — disponível no runtime do Node.js
-// 18+ e no Edge Runtime do Next.js. Esse token é o que vai na URL pública
-// do QR Code/NFC: /m/[restaurantSlug]/[tableNumber]?token=[qr_code_token]
-// (o token permite invalidar o QR sem mudar o número da mesa).
 
 export async function createTable(
   name: string
 ): Promise<ActionResult<RestaurantTable>> {
   try {
-    // --- Validação do input ---
     const trimmedName = name?.trim()
 
     if (!trimmedName) {
       return { ok: false, error: 'O nome/número da mesa não pode ser vazio.' }
     }
-
     if (trimmedName.length > 50) {
-      return {
-        ok: false,
-        error: 'O nome da mesa deve ter no máximo 50 caracteres.',
-      }
+      return { ok: false, error: 'O nome da mesa deve ter no máximo 50 caracteres.' }
     }
 
-    // --- Autenticação e restaurante ---
+    const tableSlug = generateTableSlug(trimmedName)
+
+    if (!tableSlug) {
+      return { ok: false, error: 'Nome inválido. Use letras, números ou espaços.' }
+    }
+
     const resolved = await resolveRestaurantId()
     if (!resolved.ok) return resolved
 
     const { restaurantId, supabase } = resolved
 
-    // --- Verifica duplicata antes do insert para mensagem amigável ---
-    const { data: existing } = await supabase
+    // Verifica duplicata pelo slug (não pelo nome bruto — "Mesa 2" e "mesa 2" são iguais)
+    const { data: existingSlug } = await supabase
       .from('restaurant_tables')
-      .select('id')
+      .select('id, table_number')
       .eq('restaurant_id', restaurantId)
-      .eq('table_number', trimmedName)
+      .eq('table_slug', tableSlug)
       .maybeSingle()
 
-    if (existing) {
+    if (existingSlug) {
       return {
         ok: false,
-        error: `Já existe uma mesa com o nome "${trimmedName}".`,
+        error: `Já existe uma mesa com esse nome ("${existingSlug.table_number}"). Escolha um nome diferente.`,
       }
     }
 
-    // --- Token único para o QR Code / NFC ---
     const qrCodeToken = crypto.randomUUID()
 
-    // --- Insert ---
     const { data, error } = await supabase
       .from('restaurant_tables')
       .insert({
         restaurant_id: restaurantId,
-        table_number: trimmedName,
+        table_number:  trimmedName,   // nome original para exibição
+        table_slug:    tableSlug,     // slug normalizado para URL
         qr_code_token: qrCodeToken,
-        is_active: true,
+        is_active:     true,
       })
       .select()
       .single()
@@ -170,28 +145,18 @@ export async function createTable(
 }
 
 // ---------------------------------------------------------------------------
-// 3. deleteTable — remove uma mesa pelo id
+// 3. deleteTable
 // ---------------------------------------------------------------------------
-//
-// Segurança: o .eq('restaurant_id', restaurantId) garante que um dono
-// não consiga deletar a mesa de outro restaurante mesmo que descubra o UUID.
-// O ON DELETE RESTRICT nas orders impede remover mesas com pedidos vinculados
-// — o banco retorna erro e a action entrega mensagem amigável.
 
 export async function deleteTable(id: string): Promise<ActionResult> {
   try {
-    // --- Validação básica do id ---
-    if (!id?.trim()) {
-      return { ok: false, error: 'ID da mesa inválido.' }
-    }
+    if (!id?.trim()) return { ok: false, error: 'ID da mesa inválido.' }
 
-    // --- Autenticação e restaurante ---
     const resolved = await resolveRestaurantId()
     if (!resolved.ok) return resolved
 
     const { restaurantId, supabase } = resolved
 
-    // --- Delete com filtro duplo (id + restaurant_id) ---
     const { error } = await supabase
       .from('restaurant_tables')
       .delete()
@@ -201,7 +166,6 @@ export async function deleteTable(id: string): Promise<ActionResult> {
     if (error) {
       console.error('[deleteTable]', error)
 
-      // FK violation: a mesa tem pedidos vinculados (ON DELETE RESTRICT)
       const hasFkViolation =
         error.code === '23503' ||
         error.message?.toLowerCase().includes('foreign key')
@@ -209,8 +173,7 @@ export async function deleteTable(id: string): Promise<ActionResult> {
       if (hasFkViolation) {
         return {
           ok: false,
-          error:
-            'Esta mesa possui pedidos registrados e não pode ser excluída. Desative-a em vez de excluir.',
+          error: 'Esta mesa possui pedidos registrados e não pode ser excluída. Desative-a em vez de excluir.',
         }
       }
 
@@ -226,20 +189,15 @@ export async function deleteTable(id: string): Promise<ActionResult> {
 }
 
 // ---------------------------------------------------------------------------
-// 4. toggleTableActive — ativa ou desativa uma mesa sem excluí-la
+// 4. toggleTableActive
 // ---------------------------------------------------------------------------
-//
-// Útil quando a mesa tem pedidos (não pode ser deletada) mas você quer
-// tirá-la do cardápio público temporariamente.
 
 export async function toggleTableActive(
   id: string,
   isActive: boolean
 ): Promise<ActionResult<RestaurantTable>> {
   try {
-    if (!id?.trim()) {
-      return { ok: false, error: 'ID da mesa inválido.' }
-    }
+    if (!id?.trim()) return { ok: false, error: 'ID da mesa inválido.' }
 
     const resolved = await resolveRestaurantId()
     if (!resolved.ok) return resolved

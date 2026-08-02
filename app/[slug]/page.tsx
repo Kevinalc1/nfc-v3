@@ -1,12 +1,3 @@
-// app/[slug]/page.tsx
-//
-// Vitrine pública do cardápio — Server Component.
-// Acessível por qualquer pessoa via link direto (redes sociais, Google Maps…).
-// Diferente de app/m/[restaurantSlug]/[tableNumber]/page.tsx, esta rota
-// não tem vínculo com mesa, carrinho ou pedido: é somente leitura.
-//
-// Rota: /{slug}   ex.: /pizzaria-do-joao
-
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
